@@ -207,6 +207,85 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_sla_records_stage ON sla_records(stage);
     CREATE INDEX IF NOT EXISTS idx_sla_escalations_order ON sla_escalations(order_id);
     CREATE INDEX IF NOT EXISTS idx_sla_escalations_resolved ON sla_escalations(is_resolved);
+    CREATE TABLE IF NOT EXISTS inspection_devices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      device_type TEXT NOT NULL,
+      building_id INTEGER NOT NULL,
+      building_name TEXT NOT NULL,
+      floor TEXT NOT NULL,
+      responsible_person TEXT NOT NULL,
+      responsible_person_id INTEGER,
+      frequency TEXT NOT NULL DEFAULT 'monthly',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      remark TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS inspection_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_no TEXT NOT NULL UNIQUE,
+      device_id INTEGER NOT NULL,
+      device_name TEXT NOT NULL,
+      device_type TEXT NOT NULL,
+      building_id INTEGER NOT NULL,
+      building_name TEXT NOT NULL,
+      floor TEXT NOT NULL,
+      inspector_id INTEGER NOT NULL,
+      inspector_name TEXT NOT NULL,
+      plan_time TEXT NOT NULL,
+      actual_time TEXT,
+      result TEXT,
+      photos TEXT DEFAULT '[]',
+      remark TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL,
+      completed_at TEXT,
+      FOREIGN KEY (device_id) REFERENCES inspection_devices(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS hazard_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      hazard_no TEXT NOT NULL UNIQUE,
+      task_id INTEGER NOT NULL,
+      device_id INTEGER NOT NULL,
+      device_name TEXT NOT NULL,
+      device_type TEXT NOT NULL,
+      building_id INTEGER NOT NULL,
+      building_name TEXT NOT NULL,
+      floor TEXT NOT NULL,
+      description TEXT NOT NULL,
+      severity TEXT NOT NULL DEFAULT 'medium',
+      rectify_person TEXT NOT NULL,
+      rectify_person_id INTEGER NOT NULL,
+      deadline TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending_rectify',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (task_id) REFERENCES inspection_tasks(id),
+      FOREIGN KEY (device_id) REFERENCES inspection_devices(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS hazard_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      hazard_id INTEGER NOT NULL,
+      action TEXT NOT NULL,
+      operator_id INTEGER NOT NULL,
+      operator_name TEXT NOT NULL,
+      remark TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (hazard_id) REFERENCES hazard_records(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_inspection_tasks_status ON inspection_tasks(status);
+    CREATE INDEX IF NOT EXISTS idx_inspection_tasks_device ON inspection_tasks(device_id);
+    CREATE INDEX IF NOT EXISTS idx_inspection_tasks_inspector ON inspection_tasks(inspector_id);
+    CREATE INDEX IF NOT EXISTS idx_inspection_tasks_plan_time ON inspection_tasks(plan_time);
+    CREATE INDEX IF NOT EXISTS idx_hazard_records_status ON hazard_records(status);
+    CREATE INDEX IF NOT EXISTS idx_hazard_records_device ON hazard_records(device_id);
+    CREATE INDEX IF NOT EXISTS idx_hazard_records_deadline ON hazard_records(deadline);
+    CREATE INDEX IF NOT EXISTS idx_hazard_history_hazard ON hazard_history(hazard_id);
     CREATE INDEX IF NOT EXISTS idx_sla_warnings_order ON sla_warnings(order_id);
   `);
 

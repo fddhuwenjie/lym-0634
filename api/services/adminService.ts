@@ -124,7 +124,7 @@ function escapeCsv(v: any): string {
 }
 
 export function createExport(
-  type: "quality" | "material" | "evaluation",
+  type: "quality" | "material" | "evaluation" | "inspection_tasks" | "hazard_records",
   filters: Record<string, any>,
   createdBy: number,
   createdByName: string

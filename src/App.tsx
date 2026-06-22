@@ -18,6 +18,11 @@ import ExportPage from "@/pages/admin/ExportPage";
 import SlaConfigPage from "@/pages/admin/SlaConfigPage";
 import SlaDashboard from "@/pages/admin/SlaDashboard";
 
+import EquipmentManagement from "@/pages/admin/EquipmentManagement";
+import InspectionDashboard from "@/pages/admin/InspectionDashboard";
+import HazardDashboard from "@/pages/admin/HazardDashboard";
+import InspectionExportPage from "@/pages/admin/InspectionExportPage";
+
 export default function App() {
   return (
     <Router>
@@ -50,6 +55,10 @@ export default function App() {
           <Route path="sla-config" element={<SlaConfigPage />} />
           <Route path="materials" element={<MaterialManagement />} />
           <Route path="evaluations" element={<EvaluationManagement />} />
+          <Route path="equipment" element={<EquipmentManagement />} />
+          <Route path="inspection" element={<InspectionDashboard />} />
+          <Route path="hazard" element={<HazardDashboard />} />
+          <Route path="inspection-export" element={<InspectionExportPage />} />
           <Route path="export" element={<ExportPage />} />
         </Route>
 

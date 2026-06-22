@@ -3,6 +3,7 @@
  */
 import app from './app.js';
 import { processAllSla } from './services/slaService.js';
+import { generateAutoTasks, markOverdueTasks, markOverdueHazards } from './services/inspectionService.js';
 
 /**
  * start server with port
@@ -14,7 +15,15 @@ const server = app.listen(PORT, () => {
   
   processAllSla();
   console.log('SLA 初始化检查完成');
-  
+
+  const inspectionResult = generateAutoTasks();
+  if (inspectionResult.created > 0) {
+    console.log(`[巡检] 自动生成 ${inspectionResult.created} 条巡检任务`);
+  }
+  markOverdueTasks();
+  markOverdueHazards();
+  console.log('巡检逾期检查完成');
+
   setInterval(() => {
     const result = processAllSla();
     if (result.warnings > 0 || result.overdues > 0 || result.escalations > 0) {

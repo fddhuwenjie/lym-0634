@@ -11,6 +11,9 @@ import {
   Building2,
   AlertTriangle,
   Settings,
+  Cpu,
+  ClipboardCheck,
+  ShieldAlert,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { UserRole } from "../../shared/types";
@@ -31,8 +34,12 @@ const menus: Record<UserRole, { path: string; label: string; icon: React.ReactNo
     { path: "/admin/dashboard", label: "维修看板", icon: <Home size={18} /> },
     { path: "/admin/sla-dashboard", label: "SLA 监控", icon: <AlertTriangle size={18} /> },
     { path: "/admin/sla-config", label: "SLA 配置", icon: <Settings size={18} /> },
+    { path: "/admin/equipment", label: "设备台账", icon: <Cpu size={18} /> },
+    { path: "/admin/inspection", label: "巡检看板", icon: <ClipboardCheck size={18} /> },
+    { path: "/admin/hazard", label: "隐患闭环", icon: <ShieldAlert size={18} /> },
     { path: "/admin/materials", label: "材料库存", icon: <Warehouse size={18} /> },
     { path: "/admin/evaluations", label: "服务评价", icon: <Star size={18} /> },
+    { path: "/admin/inspection-export", label: "巡检导出", icon: <Download size={18} /> },
     { path: "/admin/export", label: "数据导出", icon: <Download size={18} /> },
   ],
 };

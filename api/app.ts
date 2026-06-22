@@ -12,6 +12,7 @@ import orderRoutes from "./routes/orders.js";
 import materialRoutes from "./routes/materials.js";
 import adminRoutes from "./routes/admin.js";
 import slaRoutes from "./routes/sla.js";
+import inspectionRoutes from "./routes/inspection.js";
 import { initDatabase } from "./db/database.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -31,6 +32,7 @@ app.use("/api/work-orders", orderRoutes);
 app.use("/api/materials", materialRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/sla", slaRoutes);
+app.use("/api/inspection", inspectionRoutes);
 
 app.use(
   "/api/health",
