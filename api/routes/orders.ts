@@ -49,13 +49,14 @@ router.get("/:id", (req, res) => {
 
 router.post("/:id/dispatch", (req, res) => {
   try {
-    const { workerId, operatorId, operatorName, remark } = req.body;
+    const { workerId, operatorId, operatorName, remark, isRedispatch } = req.body;
     const order = dispatchOrder(
       Number(req.params.id),
       workerId,
       operatorId,
       operatorName,
-      remark
+      remark,
+      isRedispatch
     );
     res.json({ order });
   } catch (e: any) {

@@ -148,6 +148,13 @@ export type SlaStatus = "normal" | "warning" | "overdue" | "escalated" | "resolv
 export type SlaStage = "response" | "arrive" | "complete";
 export type SlaPauseReason = "material_shortage" | "rework" | "redispatch" | "other";
 
+export interface PendingMaterial {
+  materialId: number;
+  materialName: string;
+  requiredQuantity: number;
+  currentStock: number;
+}
+
 export interface SlaRecord {
   id: number;
   orderId: number;
@@ -166,6 +173,7 @@ export interface SlaRecord {
   pauseMinutes: number;
   actualMinutes?: number;
   resolvedAt?: string;
+  pendingMaterials: PendingMaterial[];
   createdAt: string;
 }
 

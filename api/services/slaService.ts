@@ -11,6 +11,7 @@ import {
   WorkOrderWithSla,
   SlaDashboardStats,
   SLA_STAGE_LABELS,
+  PendingMaterial,
 } from "../../shared/types";
 import { getOrderById, listOrders } from "./orderService";
 
@@ -49,6 +50,7 @@ function parseSlaRecord(row: any): SlaRecord {
     pauseMinutes: row.pause_minutes || 0,
     actualMinutes: row.actual_minutes,
     resolvedAt: row.resolved_at,
+    pendingMaterials: row.pending_materials ? JSON.parse(row.pending_materials) : [],
     createdAt: row.created_at,
   };
 }
@@ -315,12 +317,19 @@ export function updateSlaRecordStatus(
 
 export function pauseSlaRecord(
   id: number,
-  reason: SlaPauseReason
+  reason: SlaPauseReason,
+  pendingMaterials?: PendingMaterial[]
 ): SlaRecord {
   const now = new Date().toISOString();
-  db.prepare(
-    `UPDATE sla_records SET is_paused = 1, pause_reason = ?, paused_at = ? WHERE id = ?`
-  ).run(reason, now, id);
+  if (pendingMaterials && pendingMaterials.length > 0) {
+    db.prepare(
+      `UPDATE sla_records SET is_paused = 1, pause_reason = ?, paused_at = ?, pending_materials = ? WHERE id = ?`
+    ).run(reason, now, JSON.stringify(pendingMaterials), id);
+  } else {
+    db.prepare(
+      `UPDATE sla_records SET is_paused = 1, pause_reason = ?, paused_at = ? WHERE id = ?`
+    ).run(reason, now, id);
+  }
   return getSlaRecordById(id)!;
 }
 
@@ -340,7 +349,8 @@ export function resumeSlaRecord(id: number): SlaRecord {
   db.prepare(
     `UPDATE sla_records 
      SET is_paused = 0, resumed_at = ?, pause_minutes = pause_minutes + ?, 
-         deadline = ?, status = 'normal', warning_at = NULL, overdue_at = NULL
+         deadline = ?, status = 'normal', warning_at = NULL, overdue_at = NULL,
+         pending_materials = NULL
      WHERE id = ?`
   ).run(now, pauseMinutes, newDeadline, id);
 
@@ -807,16 +817,87 @@ export function listOrdersWithSla(params?: {
   return result;
 }
 
-export function handleMaterialShortage(orderId: number): void {
+export function handleMaterialShortage(
+  orderId: number,
+  pendingMaterials: PendingMaterial[]
+): {
+  shortMaterials: PendingMaterial[];
+  slaPaused: boolean;
+} {
   const activeRecord = getActiveSlaRecord(orderId);
+  let slaPaused = false;
   if (activeRecord && !activeRecord.isPaused) {
-    pauseSlaRecord(activeRecord.id, "material_shortage");
+    pauseSlaRecord(activeRecord.id, "material_shortage", pendingMaterials);
+    slaPaused = true;
+  } else if (activeRecord && activeRecord.isPaused && activeRecord.pauseReason === "material_shortage") {
+    db.prepare(
+      `UPDATE sla_records SET pending_materials = ? WHERE id = ?`
+    ).run(JSON.stringify(pendingMaterials), activeRecord.id);
   }
+  return { shortMaterials: pendingMaterials, slaPaused };
 }
 
-export function handleMaterialRestocked(orderId: number): void {
+export function checkMaterialRequirements(orderId: number): boolean {
   const activeRecord = getActiveSlaRecord(orderId);
-  if (activeRecord && activeRecord.isPaused) {
-    resumeSlaRecord(activeRecord.id);
+  if (!activeRecord || !activeRecord.isPaused || activeRecord.pauseReason !== "material_shortage") {
+    return true;
   }
+
+  const pendingMaterials = activeRecord.pendingMaterials;
+  if (!pendingMaterials || pendingMaterials.length === 0) {
+    return true;
+  }
+
+  for (const pm of pendingMaterials) {
+    const mat = db
+      .prepare("SELECT * FROM materials WHERE id = ?")
+      .get(pm.materialId) as any;
+    if (!mat || mat.stock < pm.requiredQuantity) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+export function handleMaterialRestocked(orderId: number): boolean {
+  const activeRecord = getActiveSlaRecord(orderId);
+  if (!activeRecord || !activeRecord.isPaused || activeRecord.pauseReason !== "material_shortage") {
+    return false;
+  }
+
+  if (checkMaterialRequirements(orderId)) {
+    resumeSlaRecord(activeRecord.id);
+    return true;
+  }
+
+  return false;
+}
+
+export function tryResumeSlaForMaterial(materialId: number): {
+  resumedOrders: number[];
+  checkedOrders: number[];
+} {
+  const resumedOrders: number[] = [];
+  const checkedOrders: number[] = [];
+
+  const pendingOrders = db
+    .prepare(
+      `SELECT DISTINCT o.id 
+       FROM work_orders o
+       INNER JOIN sla_records s ON o.id = s.order_id
+       WHERE o.status IN ('dispatched', 'processing')
+         AND s.is_paused = 1
+         AND s.pause_reason = 'material_shortage'`
+    )
+    .all() as { id: number }[];
+
+  for (const po of pendingOrders) {
+    checkedOrders.push(po.id);
+    if (handleMaterialRestocked(po.id)) {
+      resumedOrders.push(po.id);
+    }
+  }
+
+  return { resumedOrders, checkedOrders };
 }

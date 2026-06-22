@@ -151,6 +151,7 @@ export function initDatabase() {
       pause_minutes INTEGER DEFAULT 0,
       actual_minutes INTEGER,
       resolved_at TEXT,
+      pending_materials TEXT,
       created_at TEXT NOT NULL,
       FOREIGN KEY (order_id) REFERENCES work_orders(id)
     );

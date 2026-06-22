@@ -5,6 +5,7 @@ import {
   User,
   MaterialUsage,
   WorkOrderStatus,
+  type PendingMaterial,
 } from "../../shared/types";
 import {
   startOrderSla,
@@ -221,12 +222,20 @@ export function dispatchOrder(
   workerId: number,
   operatorId: number,
   operatorName: string,
-  remark?: string
+  remark?: string,
+  forceRedispatch?: boolean
 ): WorkOrder {
   const order = getOrderById(orderId);
   if (!order) throw new Error("工单不存在");
-  if (!["pending", "dispatched"].includes(order.status)) {
-    throw new Error("当前状态不支持派单");
+  const isRedispatch = forceRedispatch || !!order.workerId;
+  if (isRedispatch) {
+    if (!["dispatched", "processing"].includes(order.status)) {
+      throw new Error("当前状态不支持改派");
+    }
+  } else {
+    if (!["pending"].includes(order.status)) {
+      throw new Error("当前状态不支持派单");
+    }
   }
 
   if (!checkWorkerArea(workerId, order.buildingId)) {
@@ -239,7 +248,6 @@ export function dispatchOrder(
   if (!worker) throw new Error("维修工不存在");
 
   const now = new Date().toISOString();
-  const isRedispatch = !!order.workerId;
 
   const tx = db.transaction(() => {
     db.prepare(
@@ -372,15 +380,29 @@ export function completeOrder(params: {
     throw new Error("不是分配给您的工单");
   }
 
+  const pendingMaterials: (PendingMaterial & { unit: string })[] = [];
   for (const usage of params.materialUsages) {
     const mat = db
       .prepare("SELECT * FROM materials WHERE id = ?")
       .get(usage.materialId) as any;
     if (!mat) throw new Error(`材料不存在: id=${usage.materialId}`);
     if (mat.stock < usage.quantity) {
-      handleMaterialShortage(params.orderId);
-      throw new Error(`材料库存不足: ${mat.name} 仅剩${mat.stock}${mat.unit}，已自动暂停 SLA 计时`);
+      pendingMaterials.push({
+        materialId: mat.id,
+        materialName: mat.name,
+        requiredQuantity: usage.quantity,
+        currentStock: mat.stock,
+        unit: mat.unit,
+      });
     }
+  }
+
+  if (pendingMaterials.length > 0) {
+    const result = handleMaterialShortage(params.orderId, pendingMaterials);
+    const shortDesc = pendingMaterials
+      .map((m) => `${m.materialName} 需求${m.requiredQuantity}${m.unit}，库存${m.currentStock}${m.unit}`)
+      .join("; ");
+    throw new Error(`材料库存不足: ${shortDesc}，已自动暂停 SLA 计时`);
   }
 
   const now = new Date().toISOString();

@@ -7,8 +7,7 @@ import {
   returnMaterial,
   listTransactions,
 } from "../services/materialService";
-import { db } from "../db/database";
-import { handleMaterialRestocked } from "../services/slaService";
+import { tryResumeSlaForMaterial } from "../services/slaService";
 
 const router = Router();
 
@@ -50,24 +49,13 @@ router.post("/:id/stock-in", (req, res) => {
       req.body.remark
     );
 
-    if (result.beforeStock === 0 && result.afterStock > 0) {
-      const pendingOrders = db
-        .prepare(
-          `SELECT DISTINCT o.id 
-           FROM work_orders o
-           INNER JOIN sla_records s ON o.id = s.order_id
-           WHERE o.status IN ('dispatched', 'processing')
-             AND s.is_paused = 1
-             AND s.pause_reason = 'material_shortage'`
-        )
-        .all() as { id: number }[];
+    const slaResult = tryResumeSlaForMaterial(Number(req.params.id));
 
-      for (const po of pendingOrders) {
-        handleMaterialRestocked(po.id);
-      }
-    }
-
-    res.json({ material: result.material });
+    res.json({
+      material: result.material,
+      slaResumedOrders: slaResult.resumedOrders,
+      slaCheckedOrders: slaResult.checkedOrders,
+    });
   } catch (e: any) {
     res.status(400).json({ error: e.message });
   }

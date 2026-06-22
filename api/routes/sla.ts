@@ -14,6 +14,8 @@ import {
   processAllSla,
   handleMaterialShortage,
   handleMaterialRestocked,
+  checkMaterialRequirements,
+  tryResumeSlaForMaterial,
   enrichOrderWithSla,
   getSlaConfig,
 } from "../services/slaService";
@@ -168,8 +170,12 @@ router.post("/escalations/:id/resolve", (req, res) => {
 
 router.post("/orders/:id/material-shortage", (req, res) => {
   try {
-    handleMaterialShortage(Number(req.params.id));
-    res.json({ success: true });
+    const { pendingMaterials } = req.body;
+    if (!pendingMaterials || !Array.isArray(pendingMaterials)) {
+      throw new Error("缺少 pendingMaterials 参数");
+    }
+    const result = handleMaterialShortage(Number(req.params.id), pendingMaterials);
+    res.json({ success: true, ...result });
   } catch (e: any) {
     res.status(400).json({ error: e.message });
   }
@@ -177,8 +183,26 @@ router.post("/orders/:id/material-shortage", (req, res) => {
 
 router.post("/orders/:id/material-restocked", (req, res) => {
   try {
-    handleMaterialRestocked(Number(req.params.id));
-    res.json({ success: true });
+    const resumed = handleMaterialRestocked(Number(req.params.id));
+    res.json({ success: true, resumed });
+  } catch (e: any) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.get("/orders/:id/material-check", (req, res) => {
+  try {
+    const satisfied = checkMaterialRequirements(Number(req.params.id));
+    res.json({ success: true, satisfied });
+  } catch (e: any) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post("/materials/:id/try-resume", (req, res) => {
+  try {
+    const result = tryResumeSlaForMaterial(Number(req.params.id));
+    res.json({ success: true, ...result });
   } catch (e: any) {
     res.status(400).json({ error: e.message });
   }
