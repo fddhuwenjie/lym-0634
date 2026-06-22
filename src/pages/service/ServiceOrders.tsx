@@ -173,7 +173,7 @@ export default function ServiceOrders() {
             <WorkOrderCard
               key={o.id}
               order={o}
-              onClick={() => navigate(`/service/orders/${o.id}/dispatch`)}
+              onClick={() => navigate(`/service/orders/${o.id}`)}
               extra={
                 <div className="flex gap-2">
                   {o.status === "pending" && (

@@ -89,13 +89,15 @@ export function checkDuplicateReport(
 export function checkWorkerArea(workerId: number, buildingId: number): boolean {
   const worker = db
     .prepare("SELECT * FROM users WHERE id = ? AND role = 'worker'")
-    .get(workerId) as User | undefined;
-  if (!worker || !worker.buildingIds) return false;
+    .get(workerId) as any;
+  if (!worker) return false;
+  const rawIds = worker.building_ids;
+  if (!rawIds) return false;
   let buildingIds: number[] = [];
-  if (typeof worker.buildingIds === "string") {
-    buildingIds = JSON.parse(worker.buildingIds);
-  } else {
-    buildingIds = worker.buildingIds;
+  if (typeof rawIds === "string") {
+    buildingIds = JSON.parse(rawIds);
+  } else if (Array.isArray(rawIds)) {
+    buildingIds = rawIds;
   }
   return buildingIds.includes(buildingId);
 }

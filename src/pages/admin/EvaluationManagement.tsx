@@ -66,11 +66,10 @@ export default function EvaluationManagement() {
     setSubmitting(true);
     try {
       await request(`/api/work-orders/${selectedEvaluation.orderId}/rework`, {
-        method: "POST",
+        method: "PUT",
         body: JSON.stringify({
           operatorId: 5,
-          operatorName: "系统管理员",
-          remark: reworkRemark || "评价不满意，要求返工",
+          reason: reworkRemark || "评价不满意，要求返工",
         }),
       });
       toast.success("返工工单已创建");

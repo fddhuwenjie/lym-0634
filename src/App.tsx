@@ -32,6 +32,7 @@ export default function App() {
         <Route path="/service" element={<Layout />}>
           <Route index element={<Navigate to="/service/orders" replace />} />
           <Route path="orders" element={<ServiceOrders />} />
+          <Route path="orders/:id" element={<ResidentOrderDetail />} />
         </Route>
 
         <Route path="/worker" element={<Layout />}>
