@@ -15,6 +15,8 @@ import Dashboard from "@/pages/admin/Dashboard";
 import MaterialManagement from "@/pages/admin/MaterialManagement";
 import EvaluationManagement from "@/pages/admin/EvaluationManagement";
 import ExportPage from "@/pages/admin/ExportPage";
+import SlaConfigPage from "@/pages/admin/SlaConfigPage";
+import SlaDashboard from "@/pages/admin/SlaDashboard";
 
 export default function App() {
   return (
@@ -44,6 +46,8 @@ export default function App() {
         <Route path="/admin" element={<Layout />}>
           <Route index element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
+          <Route path="sla-dashboard" element={<SlaDashboard />} />
+          <Route path="sla-config" element={<SlaConfigPage />} />
           <Route path="materials" element={<MaterialManagement />} />
           <Route path="evaluations" element={<EvaluationManagement />} />
           <Route path="export" element={<ExportPage />} />

@@ -4,9 +4,12 @@ import {
   Evaluation,
   ExportRecord,
   REPAIR_TYPE_LABELS,
+  SLA_STATUS_LABELS,
+  SLA_STAGE_LABELS,
 } from "../../shared/types";
 import { listOrders, listDispatchLogs, getOrderMaterials } from "./orderService";
 import { listTransactions } from "./materialService";
+import { enrichOrderWithSla, getSlaRecordsByOrder, getSlaEscalationsByOrder } from "./slaService";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -142,8 +145,16 @@ export function createExport(
   if (type === "quality") {
     const orders = listOrders(filters);
     csvContent =
-      "工单编号,楼栋,单元房间,报修类型,紧急程度,状态,报修人,维修工,创建时间,派单时间,到场时间,完工时间,处理时长(分钟),是否返工,返工次数,是否超时,异常原因,派单备注,处理说明,完工说明\n";
+      "工单编号,楼栋,单元房间,报修类型,紧急程度,状态,报修人,维修工,创建时间,派单时间,到场时间,完工时间,处理时长(分钟),是否返工,返工次数,是否超时,异常原因,派单备注,处理说明,完工说明," +
+      "SLA状态,SLA当前阶段,SLA截止时间,剩余时间(分钟),超时时间(分钟)," +
+      "响应时限(分钟),到场时限(分钟),完工时限(分钟)," +
+      "升级次数,最后升级原因,最后升级对象,最后升级时间,升级处理意见,升级处理结果,升级解除时间," +
+      "SLA暂停次数,暂停原因,暂停时长(分钟)\n";
     for (const o of orders) {
+      const orderWithSla = enrichOrderWithSla(o);
+      const slaRecords = getSlaRecordsByOrder(o.id);
+      const escalations = getSlaEscalationsByOrder(o.id);
+      
       let duration = "";
       if (o.arriveTime && o.completedAt) {
         duration = String(
@@ -156,6 +167,18 @@ export function createExport(
       }
       const dispatches = listDispatchLogs(o.id);
       const lastDispatch = dispatches[0];
+      
+      const lastEscalation = escalations.find(e => !e.isResolved) || escalations[0];
+      const pauseRecords = slaRecords.filter(r => r.isPaused || r.pauseMinutes > 0);
+      const totalPauseMinutes = pauseRecords.reduce((sum, r) => sum + r.pauseMinutes, 0);
+      const pauseReasons = [...new Set(pauseRecords.map(r => r.pauseReason).filter(Boolean))].join(";");
+      
+      const slaConfig = slaRecords.length > 0 ? {
+        responseLimit: slaRecords.find(r => r.stage === "response")?.limitMinutes || "",
+        arriveLimit: slaRecords.find(r => r.stage === "arrive")?.limitMinutes || "",
+        completeLimit: slaRecords.find(r => r.stage === "complete")?.limitMinutes || "",
+      } : { responseLimit: "", arriveLimit: "", completeLimit: "" };
+      
       csvContent +=
         [
           o.orderNo,
@@ -178,6 +201,24 @@ export function createExport(
           lastDispatch?.remark || o.dispatchRemark || "",
           o.processRemark || "",
           o.completeRemark || "",
+          SLA_STATUS_LABELS[orderWithSla.currentSlaStatus as keyof typeof SLA_STATUS_LABELS] || orderWithSla.currentSlaStatus,
+          orderWithSla.currentStage ? SLA_STAGE_LABELS[orderWithSla.currentStage as keyof typeof SLA_STAGE_LABELS] : "",
+          orderWithSla.currentDeadline || "",
+          orderWithSla.remainingMinutes !== null ? orderWithSla.remainingMinutes : "",
+          orderWithSla.overdueMinutes !== null ? orderWithSla.overdueMinutes : "",
+          slaConfig.responseLimit,
+          slaConfig.arriveLimit,
+          slaConfig.completeLimit,
+          escalations.length,
+          lastEscalation?.triggerReason || "",
+          lastEscalation?.escalatedToUserName || "",
+          lastEscalation?.createdAt || "",
+          lastEscalation?.handlerRemark || "",
+          lastEscalation?.resolution || "",
+          lastEscalation?.resolvedAt || "",
+          pauseRecords.length,
+          pauseReasons,
+          totalPauseMinutes,
         ]
           .map(escapeCsv)
           .join(",") +

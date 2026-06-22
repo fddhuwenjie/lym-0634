@@ -97,7 +97,7 @@ export function stockIn(
   });
   tx();
 
-  return getMaterial(id)!;
+  return { material: getMaterial(id)!, beforeStock, afterStock };
 }
 
 export function returnMaterial(

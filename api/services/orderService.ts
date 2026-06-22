@@ -6,6 +6,17 @@ import {
   MaterialUsage,
   WorkOrderStatus,
 } from "../../shared/types";
+import {
+  startOrderSla,
+  transitionSlaStage,
+  getActiveSlaRecord,
+  pauseSlaRecord,
+  resumeSlaRecord,
+  updateSlaRecordStatus,
+  getSlaConfig,
+  createSlaRecord,
+  handleMaterialShortage,
+} from "./slaService";
 
 function parseWorkOrder(row: any): WorkOrder {
   return {
@@ -149,7 +160,10 @@ export function createOrder(params: {
       now
     );
 
-  return getOrderById(result.lastInsertRowid as number)!;
+  const orderId = result.lastInsertRowid as number;
+  startOrderSla(orderId);
+
+  return getOrderById(orderId)!;
 }
 
 export function getOrderById(id: number): WorkOrder | null {
@@ -248,6 +262,23 @@ export function dispatchOrder(
   });
   tx();
 
+  if (isRedispatch) {
+    const activeRecord = getActiveSlaRecord(orderId);
+    if (activeRecord) {
+      if (activeRecord.isPaused) {
+        resumeSlaRecord(activeRecord.id);
+      } else {
+        pauseSlaRecord(activeRecord.id, "redispatch");
+        const recordAfterPause = getActiveSlaRecord(orderId);
+        if (recordAfterPause && recordAfterPause.isPaused) {
+          resumeSlaRecord(recordAfterPause.id);
+        }
+      }
+    }
+  } else {
+    transitionSlaStage(orderId, "arrive", now);
+  }
+
   return getOrderById(orderId)!;
 }
 
@@ -294,6 +325,8 @@ export function arriveAtSite(orderId: number, workerId: number): WorkOrder {
   db.prepare(
     `UPDATE work_orders SET status = 'processing', arrive_time = ? WHERE id = ?`
   ).run(now, orderId);
+
+  transitionSlaStage(orderId, "complete", now);
 
   return getOrderById(orderId)!;
 }
@@ -345,7 +378,8 @@ export function completeOrder(params: {
       .get(usage.materialId) as any;
     if (!mat) throw new Error(`材料不存在: id=${usage.materialId}`);
     if (mat.stock < usage.quantity) {
-      throw new Error(`材料库存不足: ${mat.name} 仅剩${mat.stock}${mat.unit}`);
+      handleMaterialShortage(params.orderId);
+      throw new Error(`材料库存不足: ${mat.name} 仅剩${mat.stock}${mat.unit}，已自动暂停 SLA 计时`);
     }
   }
 
@@ -398,6 +432,18 @@ export function completeOrder(params: {
   });
   tx();
 
+  const activeRecord = getActiveSlaRecord(params.orderId);
+  if (activeRecord) {
+    const actualMinutes = Math.round(
+      (new Date(now).getTime() - new Date(activeRecord.startTime).getTime()) /
+        60000
+    );
+    updateSlaRecordStatus(activeRecord.id, "resolved", {
+      resolvedAt: now,
+      actualMinutes,
+    });
+  }
+
   return getOrderById(params.orderId)!;
 }
 
@@ -420,6 +466,20 @@ export function reworkOrder(
     `UPDATE work_orders SET status = 'processing', is_rework = 1, 
      rework_count = rework_count + 1, abnormal_reason = ?, closed_at = NULL WHERE id = ?`
   ).run(reason, orderId);
+
+  const config = getSlaConfig(order.type, order.urgency, order.buildingId);
+  if (config) {
+    createSlaRecord(orderId, order.orderNo, "complete", now, config.completeLimit);
+    
+    const activeRecord = getActiveSlaRecord(orderId);
+    if (activeRecord) {
+      pauseSlaRecord(activeRecord.id, "rework");
+      const recordAfterPause = getActiveSlaRecord(orderId);
+      if (recordAfterPause && recordAfterPause.isPaused) {
+        resumeSlaRecord(recordAfterPause.id);
+      }
+    }
+  }
 
   return getOrderById(orderId)!;
 }

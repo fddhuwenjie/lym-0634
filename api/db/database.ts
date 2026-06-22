@@ -118,11 +118,95 @@ export function initDatabase() {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS sla_configs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      repair_type TEXT NOT NULL,
+      urgency TEXT NOT NULL,
+      building_id INTEGER NOT NULL DEFAULT 0,
+      building_name TEXT,
+      response_limit INTEGER NOT NULL DEFAULT 30,
+      arrive_limit INTEGER NOT NULL DEFAULT 60,
+      complete_limit INTEGER NOT NULL DEFAULT 1440,
+      warning_threshold INTEGER NOT NULL DEFAULT 30,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(repair_type, urgency, building_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS sla_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL,
+      order_no TEXT NOT NULL,
+      stage TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'normal',
+      start_time TEXT NOT NULL,
+      deadline TEXT NOT NULL,
+      limit_minutes INTEGER NOT NULL,
+      warning_at TEXT,
+      overdue_at TEXT,
+      is_paused INTEGER DEFAULT 0,
+      pause_reason TEXT,
+      paused_at TEXT,
+      resumed_at TEXT,
+      pause_minutes INTEGER DEFAULT 0,
+      actual_minutes INTEGER,
+      resolved_at TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (order_id) REFERENCES work_orders(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS sla_escalations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL,
+      order_no TEXT NOT NULL,
+      sla_record_id INTEGER NOT NULL,
+      trigger_reason TEXT NOT NULL,
+      trigger_stage TEXT NOT NULL,
+      overdue_minutes INTEGER NOT NULL,
+      escalated_to TEXT NOT NULL,
+      escalated_to_user_id INTEGER NOT NULL,
+      escalated_to_user_name TEXT NOT NULL,
+      operator_id INTEGER NOT NULL,
+      operator_name TEXT NOT NULL,
+      handler_remark TEXT,
+      handler_id INTEGER,
+      handler_name TEXT,
+      handled_at TEXT,
+      resolution TEXT,
+      resolver_id INTEGER,
+      resolver_name TEXT,
+      resolved_at TEXT,
+      is_resolved INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (order_id) REFERENCES work_orders(id),
+      FOREIGN KEY (sla_record_id) REFERENCES sla_records(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS sla_warnings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL,
+      order_no TEXT NOT NULL,
+      sla_record_id INTEGER NOT NULL,
+      stage TEXT NOT NULL,
+      remaining_minutes INTEGER NOT NULL,
+      notified_to TEXT NOT NULL,
+      notified_user_ids TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (order_id) REFERENCES work_orders(id),
+      FOREIGN KEY (sla_record_id) REFERENCES sla_records(id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_work_orders_status ON work_orders(status);
     CREATE INDEX IF NOT EXISTS idx_work_orders_worker ON work_orders(worker_id);
     CREATE INDEX IF NOT EXISTS idx_work_orders_resident ON work_orders(resident_id);
     CREATE INDEX IF NOT EXISTS idx_material_transactions_material ON material_transactions(material_id);
     CREATE INDEX IF NOT EXISTS idx_material_transactions_order ON material_transactions(order_id);
+    CREATE INDEX IF NOT EXISTS idx_sla_records_order ON sla_records(order_id);
+    CREATE INDEX IF NOT EXISTS idx_sla_records_status ON sla_records(status);
+    CREATE INDEX IF NOT EXISTS idx_sla_records_stage ON sla_records(stage);
+    CREATE INDEX IF NOT EXISTS idx_sla_escalations_order ON sla_escalations(order_id);
+    CREATE INDEX IF NOT EXISTS idx_sla_escalations_resolved ON sla_escalations(is_resolved);
+    CREATE INDEX IF NOT EXISTS idx_sla_warnings_order ON sla_warnings(order_id);
   `);
 
   seedInitialData();
@@ -160,6 +244,31 @@ function seedInitialData() {
   insertMaterial.run("防盗门锁芯", "个", 10, 3, 120);
   insertMaterial.run("生料带", "卷", 60, 15, 2);
   insertMaterial.run("PVC弯头", "个", 100, 30, 1.5);
+
+  const slaCount = db.prepare("SELECT COUNT(*) as cnt FROM sla_configs").get() as {
+    cnt: number;
+  };
+  if (slaCount.cnt > 0) return;
+
+  const insertSla = db.prepare(
+    `INSERT INTO sla_configs 
+     (repair_type, urgency, building_id, building_name, response_limit, arrive_limit, complete_limit, warning_threshold, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const now = new Date().toISOString();
+  const repairTypes: string[] = ["plumbing", "electrical", "structural", "appliance", "other"];
+  const urgencies: { level: string; response: number; arrive: number; complete: number }[] = [
+    { level: "low", response: 60, arrive: 120, complete: 2880 },
+    { level: "medium", response: 30, arrive: 60, complete: 1440 },
+    { level: "high", response: 15, arrive: 30, complete: 480 },
+    { level: "urgent", response: 5, arrive: 15, complete: 120 },
+  ];
+
+  for (const rt of repairTypes) {
+    for (const u of urgencies) {
+      insertSla.run(rt, u.level, 0, null, u.response, u.arrive, u.complete, 30, now, now);
+    }
+  }
 }
 
 export default db;

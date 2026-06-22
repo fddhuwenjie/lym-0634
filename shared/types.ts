@@ -130,6 +130,137 @@ export interface ExportRecord {
   createdAt: string;
 }
 
+export interface SlaConfig {
+  id: number;
+  repairType: RepairType;
+  urgency: UrgencyLevel;
+  buildingId: number;
+  buildingName: string | null;
+  responseLimit: number;
+  arriveLimit: number;
+  completeLimit: number;
+  warningThreshold: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type SlaStatus = "normal" | "warning" | "overdue" | "escalated" | "resolved";
+export type SlaStage = "response" | "arrive" | "complete";
+export type SlaPauseReason = "material_shortage" | "rework" | "redispatch" | "other";
+
+export interface SlaRecord {
+  id: number;
+  orderId: number;
+  orderNo: string;
+  stage: SlaStage;
+  status: SlaStatus;
+  startTime: string;
+  deadline: string;
+  limitMinutes: number;
+  warningAt?: string;
+  overdueAt?: string;
+  isPaused: boolean;
+  pauseReason?: SlaPauseReason;
+  pausedAt?: string;
+  resumedAt?: string;
+  pauseMinutes: number;
+  actualMinutes?: number;
+  resolvedAt?: string;
+  createdAt: string;
+}
+
+export interface SlaEscalation {
+  id: number;
+  orderId: number;
+  orderNo: string;
+  slaRecordId: number;
+  triggerReason: string;
+  triggerStage: SlaStage;
+  overdueMinutes: number;
+  escalatedTo: "service_manager" | "repair_manager";
+  escalatedToUserId: number;
+  escalatedToUserName: string;
+  operatorId: number;
+  operatorName: string;
+  handlerRemark?: string;
+  handlerId?: number;
+  handlerName?: string;
+  handledAt?: string;
+  resolution?: string;
+  resolverId?: number;
+  resolverName?: string;
+  resolvedAt?: string;
+  isResolved: boolean;
+  createdAt: string;
+}
+
+export interface SlaWarning {
+  id: number;
+  orderId: number;
+  orderNo: string;
+  slaRecordId: number;
+  stage: SlaStage;
+  remainingMinutes: number;
+  notifiedTo: string[];
+  createdAt: string;
+}
+
+export interface SlaDashboardStats {
+  warningCount: number;
+  overdueCount: number;
+  escalatedCount: number;
+  resolvedCount: number;
+  warningOrders: WorkOrderWithSla[];
+  overdueOrders: WorkOrderWithSla[];
+  escalatedOrders: WorkOrderWithSla[];
+  resolvedOrders: WorkOrderWithSla[];
+}
+
+export interface WorkOrderWithSla extends WorkOrder {
+  slaRecords: SlaRecord[];
+  escalations: SlaEscalation[];
+  currentSlaStatus: SlaStatus;
+  currentStage: SlaStage | null;
+  currentDeadline: string | null;
+  remainingMinutes: number | null;
+  overdueMinutes: number | null;
+  lastEscalation: SlaEscalation | null;
+}
+
+export const SLA_STATUS_LABELS: Record<SlaStatus, string> = {
+  normal: "正常",
+  warning: "预警",
+  overdue: "已超时",
+  escalated: "已升级",
+  resolved: "已解除",
+};
+
+export const SLA_STATUS_COLORS: Record<SlaStatus, string> = {
+  normal: "bg-green-100 text-green-700",
+  warning: "bg-amber-100 text-amber-700",
+  overdue: "bg-red-100 text-red-700",
+  escalated: "bg-purple-100 text-purple-700",
+  resolved: "bg-slate-100 text-slate-700",
+};
+
+export const SLA_STAGE_LABELS: Record<SlaStage, string> = {
+  response: "响应",
+  arrive: "到场",
+  complete: "完工",
+};
+
+export const SLA_PAUSE_REASON_LABELS: Record<SlaPauseReason, string> = {
+  material_shortage: "材料缺货",
+  rework: "返工",
+  redispatch: "改派",
+  other: "其他",
+};
+
+export const ESCALATION_TARGET_LABELS: Record<string, string> = {
+  service_manager: "客服主管",
+  repair_manager: "维修主管",
+};
+
 export interface MaterialUsage {
   materialId: number;
   quantity: number;

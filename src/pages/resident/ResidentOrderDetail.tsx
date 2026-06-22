@@ -15,6 +15,13 @@ import {
   URGENCY_LABELS,
   URGENCY_COLORS,
   REPAIR_TYPE_LABELS,
+  SlaRecord,
+  SlaEscalation,
+  SlaWarning,
+  SLA_STATUS_LABELS,
+  SLA_STATUS_COLORS,
+  SLA_STAGE_LABELS,
+  WorkOrderWithSla,
 } from "../../../shared/types";
 import {
   ArrowLeft,
@@ -25,6 +32,9 @@ import {
   FileText,
   Send,
   Package,
+  AlertTriangle,
+  ArrowUpCircle,
+  CheckCircle2,
 } from "lucide-react";
 
 interface MaterialUsage {
@@ -41,10 +51,13 @@ export default function ResidentOrderDetail() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const toast = useToast();
-  const [order, setOrder] = useState<WorkOrder | null>(null);
+  const [order, setOrder] = useState<WorkOrderWithSla | null>(null);
   const [dispatchLogs, setDispatchLogs] = useState<DispatchLog[]>([]);
   const [materials, setMaterials] = useState<MaterialUsage[]>([]);
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
+  const [slaRecords, setSlaRecords] = useState<SlaRecord[]>([]);
+  const [slaEscalations, setSlaEscalations] = useState<SlaEscalation[]>([]);
+  const [slaWarnings, setSlaWarnings] = useState<SlaWarning[]>([]);
   const [rating, setRating] = useState(5);
   const [content, setContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -58,6 +71,16 @@ export default function ResidentOrderDetail() {
       setDispatchLogs(data.dispatchLogs || []);
       setMaterials(data.materials || []);
       setEvaluation(data.evaluation);
+      
+      try {
+        const slaData = await request(`/api/sla/orders/${id}`);
+        setOrder(slaData.order);
+        setSlaRecords(slaData.slaRecords || []);
+        setSlaEscalations(slaData.escalations || []);
+        setSlaWarnings(slaData.warnings || []);
+      } catch (slaError) {
+        console.log("SLA 数据加载失败", slaError);
+      }
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -175,6 +198,171 @@ export default function ResidentOrderDetail() {
               </div>
             </CardBody>
           </Card>
+
+          {order && order.currentSlaStatus && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <AlertTriangle size={18} className="text-primary-600" />
+                  <span className="font-semibold">SLA 服务时效</span>
+                  <Badge className={SLA_STATUS_COLORS[order.currentSlaStatus]}>
+                    {SLA_STATUS_LABELS[order.currentSlaStatus]}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardBody className="space-y-4">
+                {order.currentStage && (
+                  <div className="text-sm">
+                    <span className="text-slate-500">当前阶段：</span>
+                    <span className="font-medium text-slate-800">
+                      {SLA_STAGE_LABELS[order.currentStage]}
+                    </span>
+                  </div>
+                )}
+                {order.currentDeadline && (
+                  <div className="text-sm">
+                    <span className="text-slate-500">截止时间：</span>
+                    <span className="font-medium text-slate-800">
+                      {formatDateTime(order.currentDeadline)}
+                    </span>
+                  </div>
+                )}
+                {order.remainingMinutes !== null && (
+                  <div className="text-sm">
+                    <span className="text-slate-500">剩余时间：</span>
+                    <span
+                      className={`font-medium ${
+                        order.remainingMinutes < 0 ? "text-red-600" : "text-slate-800"
+                      }`}
+                    >
+                      {order.remainingMinutes < 0
+                        ? `已超时 ${Math.abs(order.remainingMinutes)} 分钟`
+                        : `${order.remainingMinutes} 分钟`}
+                    </span>
+                  </div>
+                )}
+                {slaRecords.length > 0 && (
+                  <div className="pt-3 border-t border-slate-100">
+                    <div className="text-sm font-medium text-slate-700 mb-2">
+                      SLA 记录
+                    </div>
+                    <div className="space-y-2">
+                      {slaRecords.map((record) => (
+                        <div
+                          key={record.id}
+                          className="p-2 bg-slate-50 rounded-lg text-xs"
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-medium">
+                              {SLA_STAGE_LABELS[record.stage]}阶段
+                            </span>
+                            <Badge className={SLA_STATUS_COLORS[record.status]}>
+                              {SLA_STATUS_LABELS[record.status]}
+                            </Badge>
+                          </div>
+                          <div className="text-slate-500 space-y-0.5">
+                            <div>
+                              时限：{record.limitMinutes}分钟，截止：
+                              {formatDateTime(record.deadline)}
+                            </div>
+                            {record.actualMinutes && (
+                              <div>实际用时：{record.actualMinutes}分钟</div>
+                            )}
+                            {record.pauseMinutes > 0 && (
+                              <div className="text-amber-600">
+                                暂停时长：{record.pauseMinutes}分钟
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {slaEscalations.length > 0 && (
+                  <div className="pt-3 border-t border-slate-100">
+                    <div className="text-sm font-medium text-slate-700 mb-2">
+                      升级记录
+                    </div>
+                    <div className="space-y-2">
+                      {slaEscalations.map((esc) => (
+                        <div
+                          key={esc.id}
+                          className={`p-3 rounded-lg text-xs ${
+                            esc.isResolved
+                              ? "bg-green-50 border border-green-200"
+                              : "bg-red-50 border border-red-200"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-medium text-red-700">
+                              <ArrowUpCircle size={12} className="inline mr-1" />
+                              {esc.triggerReason}
+                            </span>
+                            <Badge
+                              className={
+                                esc.isResolved
+                                  ? "bg-green-100 text-green-700"
+                                  : "bg-red-100 text-red-700"
+                              }
+                            >
+                              {esc.isResolved ? "已解除" : "待处理"}
+                            </Badge>
+                          </div>
+                          <div className="text-slate-600 space-y-0.5">
+                            <div>升级对象：{esc.escalatedToUserName}</div>
+                            <div>升级时间：{formatDateTime(esc.createdAt)}</div>
+                            {esc.handlerRemark && (
+                              <div>处理意见：{esc.handlerRemark}</div>
+                            )}
+                            {esc.resolution && (
+                              <div className="text-green-700">
+                                <CheckCircle2
+                                  size={12}
+                                  className="inline mr-1"
+                                />
+                                处理结果：{esc.resolution}
+                              </div>
+                            )}
+                            {esc.resolvedAt && (
+                              <div>解除时间：{formatDateTime(esc.resolvedAt)}</div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {slaWarnings.length > 0 && (
+                  <div className="pt-3 border-t border-slate-100">
+                    <div className="text-sm font-medium text-slate-700 mb-2">
+                      预警记录
+                    </div>
+                    <div className="space-y-2">
+                      {slaWarnings.map((warning) => (
+                        <div
+                          key={warning.id}
+                          className="p-2 bg-amber-50 rounded-lg text-xs border border-amber-200"
+                        >
+                          <div className="text-amber-700">
+                            <AlertTriangle
+                              size={12}
+                              className="inline mr-1"
+                            />
+                            {SLA_STAGE_LABELS[warning.stage]}
+                            阶段剩余 {warning.remainingMinutes} 分钟
+                          </div>
+                          <div className="text-amber-600 text-xs mt-1">
+                            {formatDateTime(warning.createdAt)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardBody>
+            </Card>
+          )}
 
           {order.workerName && (
             <Card>

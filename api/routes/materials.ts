@@ -1,13 +1,14 @@
 import { Router } from "express";
 import {
   listMaterials,
-  getMaterial,
   createMaterial,
   updateMaterial,
   stockIn,
   returnMaterial,
   listTransactions,
 } from "../services/materialService";
+import { db } from "../db/database";
+import { handleMaterialRestocked } from "../services/slaService";
 
 const router = Router();
 
@@ -41,14 +42,32 @@ router.put("/:id", (req, res) => {
 
 router.post("/:id/stock-in", (req, res) => {
   try {
-    const m = stockIn(
+    const result = stockIn(
       Number(req.params.id),
       Number(req.body.quantity),
       Number(req.body.operatorId),
       req.body.operatorName,
       req.body.remark
     );
-    res.json({ material: m });
+
+    if (result.beforeStock === 0 && result.afterStock > 0) {
+      const pendingOrders = db
+        .prepare(
+          `SELECT DISTINCT o.id 
+           FROM work_orders o
+           INNER JOIN sla_records s ON o.id = s.order_id
+           WHERE o.status IN ('dispatched', 'processing')
+             AND s.is_paused = 1
+             AND s.pause_reason = 'material_shortage'`
+        )
+        .all() as { id: number }[];
+
+      for (const po of pendingOrders) {
+        handleMaterialRestocked(po.id);
+      }
+    }
+
+    res.json({ material: result.material });
   } catch (e: any) {
     res.status(400).json({ error: e.message });
   }
